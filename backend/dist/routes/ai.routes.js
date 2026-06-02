@@ -1,0 +1,20 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const multer_1 = __importDefault(require("multer"));
+const auth_middleware_1 = require("../middleware/auth.middleware");
+const ai_controller_1 = require("../controllers/ai.controller");
+const router = (0, express_1.Router)();
+const upload = (0, multer_1.default)({ dest: 'uploads/' });
+router.use(auth_middleware_1.authenticateToken);
+router.post('/import', ai_controller_1.importQuiz);
+router.post('/import/topic', ai_controller_1.importQuiz);
+router.post('/import/text', ai_controller_1.importQuiz);
+router.post('/import/url', ai_controller_1.importQuiz);
+router.post('/import/pdf', upload.single('file'), ai_controller_1.importQuiz);
+router.post('/import/image', upload.single('file'), ai_controller_1.importQuiz);
+router.get('/import/:jobId', ai_controller_1.getImportStatus);
+exports.default = router;

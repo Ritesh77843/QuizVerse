@@ -1,0 +1,15 @@
+.env
+*.class
+target/
+*.jar
+*.war
+uploads/
+*.log
+.idea/
+*.iml
+node_modules/
+.next/
+__pycache__/
+*.pyc
+.venv/
+venv/

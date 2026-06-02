@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  password    String
+  displayName String
+  role        String   @default("HOST") // HOST or ADMIN
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  quizzes     Quiz[]
+  games       GameSession[]
+}
+
+model Quiz {
+  id                      String        @id @default(uuid())
+  title                   String
+  description             String?
+  status                  String        @default("DRAFT") // DRAFT, PUBLISHED, ARCHIVED
+  defaultTimeLimitSeconds Int           @default(20)
+  scoringMode             String        @default("STANDARD")
+  coverImageUrl           String?
+  hostId                  String
+  host                    User          @relation(fields: [hostId], references: [id])
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+  questions               Question[]
+  sessions                GameSession[]
+}
+
+model Question {
+  id               String   @id @default(uuid())
+  quizId           String
+  quiz             Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  questionText     String
+  questionType     String   @default("SINGLE_CHOICE")
+  timeLimitSeconds Int      @default(20)
+  points           Int      @default(1000)
+  position         Int
+  mediaUrl         String?
+  createdAt        DateTime @default(now())
+  options          Option[]
+}
+
+model Option {
+  id         String   @id @default(uuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  optionText String
+  isCorrect  Boolean
+  position   Int
+  colorCode  String?
+}
+
+model GameSession {
+  id                   String    @id @default(uuid())
+  pin                  String    @unique
+  quizId               String
+  quiz                 Quiz      @relation(fields: [quizId], references: [id])
+  hostId               String
+  host                 User      @relation(fields: [hostId], references: [id])
+  status               String    @default("WAITING") // WAITING, ACTIVE, PAUSED, ENDED
+  isLocked             Boolean   @default(false)
+  currentQuestionIndex Int       @default(0)
+  startedAt            DateTime?
+  endedAt              DateTime?
+  createdAt            DateTime  @default(now())
+  players              Player[]
+}
+
+model Player {
+  id            String      @id @default(uuid())
+  nickname      String
+  avatarSeed    String
+  score         Int         @default(0)
+  rank          Int?
+  sessionPin    String
+  session       GameSession @relation(fields: [sessionPin], references: [pin], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+}
+
+model ImportJob {
+  jobId           String    @id @default(uuid())
+  draftId         String?
+  jobStatus       String    @default("QUEUED") // QUEUED, PROCESSING, COMPLETED, FAILED
+  draftStatus     String?   // PENDING_REVIEW, APPROVED, DISCARDED
+  title           String?
+  parsedQuestions String?   // JSON string of AiQuestion[]
+  createdAt       DateTime  @default(now())
+  completedAt     DateTime?
+}

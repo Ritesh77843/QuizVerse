@@ -5,7 +5,9 @@ import { useGameStore } from '@/stores/gameStore';
 import { useAuthStore } from '@/stores/authStore';
 import { usePlayerStore } from '@/stores/playerStore';
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:8081';
+const WS_URL =
+  process.env.NEXT_PUBLIC_WS_URL ||
+  'https://quizverse-backend-h4j2.onrender.com';
 
 export function useWebSocket(pin: string, role: 'host' | 'player') {
   const socketRef = useRef<Socket | null>(null);

@@ -1,8 +1,10 @@
 import { Client, IMessage } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:8080/api/ws';
-
+const WS_URL =
+  process.env.NEXT_PUBLIC_WS_URL ||
+  'https://quizverse-backend-h4j2.onrender.com';
+  
 export function createStompClient(token?: string): Client {
   const client = new Client({
     webSocketFactory: () => new SockJS(WS_URL),

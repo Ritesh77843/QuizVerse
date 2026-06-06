@@ -66,30 +66,12 @@ services:
     volumes:
       - uploads_data:/app/uploads
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/actuator/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/health || exit 1"]
       interval: 30s
       timeout: 10s
-      start_period: 60s
+      start_period: 10s
       retries: 3
 
-  # ===== PYTHON AI SERVICE =====
-  ai-service:
-    build:
-      context: ./ai-service
-      dockerfile: Dockerfile
-    container_name: quizverse-ai
-    restart: unless-stopped
-    environment:
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-    ports:
-      - "8000:8000"
-    volumes:
-      - uploads_data:/app/uploads
-    depends_on:
-      redis:
-        condition: service_healthy
 
   # ===== NEXT.JS FRONTEND =====
   frontend:

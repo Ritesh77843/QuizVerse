@@ -7,9 +7,17 @@ exports.joinGame = void 0;
 const prisma_1 = __importDefault(require("../prisma"));
 const joinGame = async (req, res) => {
     try {
-        const { sessionPin, nickname, avatarSeed } = req.body;
+        // PIN can come from URL param (/games/:pin/join) or body (legacy)
+        const pin = req.params.pin || req.body.sessionPin;
+        const { nickname, avatarSeed } = req.body;
+        if (!pin) {
+            return res.status(400).json({ success: false, message: 'Game PIN is required' });
+        }
+        if (!nickname || nickname.trim().length < 2) {
+            return res.status(400).json({ success: false, message: 'Nickname must be at least 2 characters' });
+        }
         const game = await prisma_1.default.gameSession.findUnique({
-            where: { pin: sessionPin }
+            where: { pin }
         });
         if (!game) {
             return res.status(404).json({ success: false, message: 'Game session not found' });
@@ -17,18 +25,25 @@ const joinGame = async (req, res) => {
         if (game.status !== 'WAITING') {
             return res.status(400).json({ success: false, message: 'Game has already started or ended' });
         }
-        // Check for duplicate nickname in this session
+        if (game.isLocked) {
+            return res.status(403).json({ success: false, message: 'This game is locked. No new players can join.' });
+        }
+        const trimmedNickname = nickname.trim();
+        // If a player with this nickname already exists, replace them (new device takeover)
+        // The socket layer will handle kicking the old device's connection
         const existingPlayer = await prisma_1.default.player.findFirst({
-            where: { sessionPin, nickname }
+            where: { sessionPin: pin, nickname: trimmedNickname }
         });
         if (existingPlayer) {
-            return res.status(400).json({ success: false, message: 'Nickname already taken in this game' });
+            // Delete and recreate so the new device gets a fresh player ID
+            // The old socket will receive a 'force-disconnect' event from the socket handler
+            await prisma_1.default.player.delete({ where: { id: existingPlayer.id } });
         }
         const player = await prisma_1.default.player.create({
             data: {
-                nickname,
-                avatarSeed,
-                sessionPin,
+                nickname: trimmedNickname,
+                avatarSeed: avatarSeed || trimmedNickname,
+                sessionPin: pin,
                 score: 0
             }
         });

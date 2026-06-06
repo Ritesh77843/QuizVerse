@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.addQuestionToQuiz = exports.deleteQuiz = exports.updateQuiz = exports.createQuiz = exports.getQuizById = exports.getQuizzes = void 0;
+exports.unpublishQuiz = exports.publishQuiz = exports.addQuestionToQuiz = exports.deleteQuiz = exports.updateQuiz = exports.createQuiz = exports.getQuizById = exports.getPublicQuizzes = exports.getQuizzes = void 0;
 const prisma_1 = __importDefault(require("../prisma"));
 const getQuizzes = async (req, res) => {
     try {
@@ -18,13 +18,22 @@ const getQuizzes = async (req, res) => {
             return {
                 ...quiz,
                 questionCount: count,
-                hostDisplayName: req.user.displayName // Simplified for now
+                hostDisplayName: req.user.displayName
             };
         }));
+        // Return in PageResponse shape that the frontend expects
         return res.json({
             success: true,
             message: 'Quizzes retrieved',
-            data: enrichedQuizzes
+            data: {
+                content: enrichedQuizzes,
+                totalElements: enrichedQuizzes.length,
+                totalPages: 1,
+                number: 0,
+                size: enrichedQuizzes.length,
+                first: true,
+                last: true,
+            }
         });
     }
     catch (error) {
@@ -33,12 +42,51 @@ const getQuizzes = async (req, res) => {
     }
 };
 exports.getQuizzes = getQuizzes;
+const getPublicQuizzes = async (req, res) => {
+    try {
+        const quizzes = await prisma_1.default.quiz.findMany({
+            where: { status: 'PUBLISHED' },
+            orderBy: { createdAt: 'desc' },
+            include: {
+                host: {
+                    select: { displayName: true }
+                }
+            }
+        });
+        // Calculate question counts
+        const enrichedQuizzes = await Promise.all(quizzes.map(async (quiz) => {
+            const count = await prisma_1.default.question.count({ where: { quizId: quiz.id } });
+            return {
+                ...quiz,
+                questionCount: count,
+                hostDisplayName: quiz.host.displayName
+            };
+        }));
+        return res.json({
+            success: true,
+            message: 'Public quizzes retrieved',
+            data: {
+                content: enrichedQuizzes,
+                totalElements: enrichedQuizzes.length,
+                totalPages: 1,
+                number: 0,
+                size: enrichedQuizzes.length,
+                first: true,
+                last: true,
+            }
+        });
+    }
+    catch (error) {
+        console.error('Error fetching public quizzes:', error);
+        return res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+};
+exports.getPublicQuizzes = getPublicQuizzes;
 const getQuizById = async (req, res) => {
     try {
         const id = req.params.id;
-        const userId = req.user.userId;
         const quiz = await prisma_1.default.quiz.findFirst({
-            where: { id, hostId: userId },
+            where: { id },
             include: {
                 questions: {
                     include: {
@@ -70,7 +118,7 @@ exports.getQuizById = getQuizById;
 const createQuiz = async (req, res) => {
     try {
         const userId = req.user.userId;
-        const { title, description } = req.body;
+        const { title, description, questions } = req.body;
         const quiz = await prisma_1.default.quiz.create({
             data: {
                 title: title || 'Untitled Quiz',
@@ -78,6 +126,29 @@ const createQuiz = async (req, res) => {
                 hostId: userId,
             }
         });
+        // If questions were provided (e.g. from AI import), create them all
+        if (questions && Array.isArray(questions) && questions.length > 0) {
+            for (let i = 0; i < questions.length; i++) {
+                const q = questions[i];
+                await prisma_1.default.question.create({
+                    data: {
+                        quizId: quiz.id,
+                        questionText: q.questionText || q.question || 'Question',
+                        questionType: 'SINGLE_CHOICE',
+                        timeLimitSeconds: q.timeLimit || 30,
+                        points: q.points || 1000,
+                        position: i + 1,
+                        options: {
+                            create: (q.options || []).map((opt, idx) => ({
+                                optionText: typeof opt === 'string' ? opt : (opt.text || `Option ${idx + 1}`),
+                                isCorrect: typeof opt === 'string' ? idx === q.correctAnswer : (opt.isCorrect || false),
+                                position: idx + 1,
+                            }))
+                        }
+                    }
+                });
+            }
+        }
         return res.status(201).json({
             success: true,
             message: 'Quiz created successfully',
@@ -111,6 +182,33 @@ const updateQuiz = async (req, res) => {
                 coverImageUrl: data.coverImageUrl
             }
         });
+        // If questions array provided, sync them: delete all old, create new
+        if (data.questions && Array.isArray(data.questions)) {
+            // Delete all existing questions (cascades to options)
+            await prisma_1.default.question.deleteMany({ where: { quizId: id } });
+            // Re-create from payload
+            for (let i = 0; i < data.questions.length; i++) {
+                const q = data.questions[i];
+                await prisma_1.default.question.create({
+                    data: {
+                        quizId: id,
+                        questionText: q.questionText || 'Question',
+                        questionType: q.questionType || 'SINGLE_CHOICE',
+                        timeLimitSeconds: q.timeLimitSeconds || existing.defaultTimeLimitSeconds,
+                        points: q.points || 1000,
+                        position: q.position ?? (i + 1),
+                        options: {
+                            create: (q.options || []).map((opt, oi) => ({
+                                optionText: opt.optionText || `Option ${oi + 1}`,
+                                isCorrect: opt.isCorrect || false,
+                                position: opt.position ?? (oi + 1),
+                                colorCode: opt.colorCode,
+                            }))
+                        }
+                    }
+                });
+            }
+        }
         return res.json({
             success: true,
             message: 'Quiz updated successfully',
@@ -192,3 +290,43 @@ const addQuestionToQuiz = async (req, res) => {
     }
 };
 exports.addQuestionToQuiz = addQuestionToQuiz;
+const publishQuiz = async (req, res) => {
+    try {
+        const id = req.params.id;
+        const userId = req.user.userId;
+        const existing = await prisma_1.default.quiz.findFirst({ where: { id, hostId: userId } });
+        if (!existing) {
+            return res.status(404).json({ success: false, message: 'Quiz not found' });
+        }
+        const updated = await prisma_1.default.quiz.update({
+            where: { id },
+            data: { status: 'PUBLISHED' }
+        });
+        return res.json({ success: true, message: 'Quiz published', data: updated });
+    }
+    catch (error) {
+        console.error('Error publishing quiz:', error);
+        return res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+};
+exports.publishQuiz = publishQuiz;
+const unpublishQuiz = async (req, res) => {
+    try {
+        const id = req.params.id;
+        const userId = req.user.userId;
+        const existing = await prisma_1.default.quiz.findFirst({ where: { id, hostId: userId } });
+        if (!existing) {
+            return res.status(404).json({ success: false, message: 'Quiz not found' });
+        }
+        const updated = await prisma_1.default.quiz.update({
+            where: { id },
+            data: { status: 'DRAFT' }
+        });
+        return res.json({ success: true, message: 'Quiz unpublished', data: updated });
+    }
+    catch (error) {
+        console.error('Error unpublishing quiz:', error);
+        return res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+};
+exports.unpublishQuiz = unpublishQuiz;

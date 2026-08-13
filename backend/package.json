@@ -5,8 +5,9 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon src/index.ts",
-    "build": "prisma generate && prisma db push && tsc",
-    "start":  "node dist/index.js"
+    "build": "prisma generate && prisma migrate deploy && tsc",
+    "start": "node dist/index.js",
+    "migrate:dev": "prisma migrate dev"
   },
   "keywords": [],
   "author": "",

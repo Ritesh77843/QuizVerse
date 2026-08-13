@@ -1,0 +1,12 @@
+{
+    "watch": [
+        "src"
+    ],
+    "ext": "ts,json",
+    "ignore": [
+        "*.db",
+        "prisma/dev.db",
+        "dist/",
+        "node_modules/"
+    ]
+}

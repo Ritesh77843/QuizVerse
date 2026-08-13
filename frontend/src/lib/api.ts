@@ -3,7 +3,7 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   'https://quizverse-backend-h4j2.onrender.com/api';
-  
+
 export const api = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
@@ -13,7 +13,7 @@ export const api = axios.create({
 // Attach access token to every request
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (typeof window !== 'undefined') {
-    const token = sessionStorage.getItem('accessToken');
+    const token = localStorage.getItem('accessToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -48,7 +48,7 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-      const refreshToken = sessionStorage.getItem('refreshToken');
+      const refreshToken = localStorage.getItem('refreshToken');
       if (!refreshToken) {
         window.location.href = '/login';
         return Promise.reject(error);
@@ -57,14 +57,14 @@ api.interceptors.response.use(
       try {
         const { data } = await axios.post(`${API_URL}/auth/refresh`, { refreshToken });
         const newToken = data.data.accessToken;
-        sessionStorage.setItem('accessToken', newToken);
-        sessionStorage.setItem('refreshToken', data.data.refreshToken);
+        localStorage.setItem('accessToken', newToken);
+        localStorage.setItem('refreshToken', data.data.refreshToken);
         processQueue(null, newToken);
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return api(originalRequest);
       } catch (err) {
         processQueue(err);
-        sessionStorage.clear();
+        localStorage.clear();
         window.location.href = '/login';
         return Promise.reject(err);
       } finally {

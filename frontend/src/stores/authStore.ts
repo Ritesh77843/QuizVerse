@@ -2,21 +2,20 @@ import { create } from 'zustand';
 import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
 import { User } from '@/types';
 
-// Custom session storage wrapper to prevent Next.js SSR errors 
-// AND to guarantee Zustand never falls back to localStorage.
-const customSessionStorage: StateStorage = {
+// Custom local storage wrapper to prevent Next.js SSR errors 
+const customLocalStorage: StateStorage = {
   getItem: (name) => {
     if (typeof window === 'undefined') return null;
-    return sessionStorage.getItem(name);
+    return localStorage.getItem(name);
   },
   setItem: (name, value) => {
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem(name, value);
+      localStorage.setItem(name, value);
     }
   },
   removeItem: (name) => {
     if (typeof window !== 'undefined') {
-      sessionStorage.removeItem(name);
+      localStorage.removeItem(name);
     }
   },
 };
@@ -41,33 +40,34 @@ export const useAuthStore = create<AuthState>()(
 
       setAuth: (user, accessToken, refreshToken) => {
         if (typeof window !== 'undefined') {
-          sessionStorage.setItem('accessToken', accessToken);
-          sessionStorage.setItem('refreshToken', refreshToken);
+          localStorage.setItem('accessToken', accessToken);
+          localStorage.setItem('refreshToken', refreshToken);
         }
         set({ user, accessToken, refreshToken, isAuthenticated: true });
       },
 
       updateTokens: (accessToken, refreshToken) => {
         if (typeof window !== 'undefined') {
-          sessionStorage.setItem('accessToken', accessToken);
-          sessionStorage.setItem('refreshToken', refreshToken);
+          localStorage.setItem('accessToken', accessToken);
+          localStorage.setItem('refreshToken', refreshToken);
         }
         set({ accessToken, refreshToken });
       },
 
       clearAuth: () => {
         if (typeof window !== 'undefined') {
-          sessionStorage.removeItem('accessToken');
-          sessionStorage.removeItem('refreshToken');
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
         }
         set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false });
       },
     }),
-    { 
-      name: 'quizverse-auth-session-strict', // Renamed again to force-clear any stale cache
-      storage: createJSONStorage(() => customSessionStorage),
+    {
+      name: 'quizverse-auth-storage', // Key for localStorage
+      storage: createJSONStorage(() => customLocalStorage),
       partialize: (s) => ({ user: s.user, accessToken: s.accessToken, refreshToken: s.refreshToken, isAuthenticated: s.isAuthenticated }),
       skipHydration: false,
     }
   )
 );
+

@@ -39,8 +39,8 @@ async function extractTextFromPdf(buffer: Buffer): Promise<string> {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const pdfParse = require('pdf-parse');
     const fn = typeof pdfParse === 'function' ? pdfParse
-             : typeof pdfParse.default === 'function' ? pdfParse.default
-             : null;
+      : typeof pdfParse.default === 'function' ? pdfParse.default
+        : null;
     if (fn) {
       const data = await fn(buffer);
       if (data?.text?.trim()) return data.text.trim();
@@ -96,7 +96,7 @@ async function extractWithGeminiVision(buffer: Buffer, mimeType: string): Promis
 
   console.log(`[Gemini Vision] Sending ${mimeType} (${fileSizeMB.toFixed(2)} MB) to Gemini...`);
 
-  const modelsToTry = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+  const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash-001', 'gemini-1.5-flash'];
   let lastError = '';
 
   for (const model of modelsToTry) {
@@ -130,13 +130,13 @@ async function extractWithGeminiVision(buffer: Buffer, mimeType: string): Promis
       const data = await res.json();
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
       console.log(`[Gemini Vision] ${model} Extracted ${text.length} characters`);
-      
+
       if (!text.trim()) {
         console.warn(`[Gemini Vision] ${model} Empty response. Full API response:`, JSON.stringify(data).slice(0, 500));
         lastError = 'Empty response';
         continue; // Try next model
       }
-      
+
       return text.trim();
     } catch (err: any) {
       console.warn(`[Gemini Vision] ${model} exception:`, err.message);
@@ -151,22 +151,24 @@ async function extractWithGeminiVision(buffer: Buffer, mimeType: string): Promis
 // AI question generation  (Groq primary → Gemini → Grok fallback)
 // ---------------------------------------------------------------------------
 
-const SYSTEM_PROMPT = `You are a quiz generation assistant. You MUST respond with ONLY a valid JSON object matching this schema, no markdown, no explanation:
+function buildSystemPrompt(count: number): string {
+  return `You are a quiz generation assistant. You MUST respond with ONLY a valid JSON object matching this schema, no markdown, no explanation:
 {"questions":[{"question":"...","options":["A","B","C","D"],"correctAnswer":0,"confidence":100.0}]}
 Rules:
-- Generate 5-10 multiple-choice questions from the provided text.
+- Generate exactly ${count} multiple-choice questions from the provided text.
 - Each question MUST have EXACTLY 4 options.
 - correctAnswer is the 0-based index of the correct option.
 - confidence is always 100.0.
 - Make wrong options plausible.
 - Respond with ONLY the JSON, nothing else.`;
+}
 
-function buildUserPrompt(text: string): string {
-  return `Generate quiz questions from this text (respond with JSON only):\n\n${text.slice(0, 12000)}`;
+function buildUserPrompt(text: string, count: number): string {
+  return `Generate exactly ${count} quiz questions from this text (respond with JSON only):\n\n${text.slice(0, 12000)}`;
 }
 
 /** Call Groq API (OpenAI-compatible) */
-async function generateWithGroq(text: string, model: string): Promise<AiQuestion[]> {
+async function generateWithGroq(text: string, model: string, count: number): Promise<AiQuestion[]> {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error('GROQ_API_KEY not set');
 
@@ -179,14 +181,14 @@ async function generateWithGroq(text: string, model: string): Promise<AiQuestion
     body: JSON.stringify({
       model,
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildUserPrompt(text) },
+        { role: 'system', content: buildSystemPrompt(count) },
+        { role: 'user', content: buildUserPrompt(text, count) },
       ],
       temperature: 0.7,
-      max_tokens: 4000,
+      max_tokens: 4000 + count * 200,
       response_format: { type: "json_object" }
     }),
-    signal: AbortSignal.timeout(60000),
+    signal: AbortSignal.timeout(60000 + count * 1000),
   });
 
   if (!res.ok) {
@@ -201,7 +203,7 @@ async function generateWithGroq(text: string, model: string): Promise<AiQuestion
 }
 
 /** Call Grok (x.ai) API */
-async function generateWithGrok(text: string): Promise<AiQuestion[]> {
+async function generateWithGrok(text: string, count: number): Promise<AiQuestion[]> {
   const apiKey = process.env.GROK_API_KEY;
   if (!apiKey) throw new Error('GROK_API_KEY not set');
 
@@ -214,12 +216,12 @@ async function generateWithGrok(text: string): Promise<AiQuestion[]> {
     body: JSON.stringify({
       model: 'grok-3-mini',
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildUserPrompt(text) },
+        { role: 'system', content: buildSystemPrompt(count) },
+        { role: 'user', content: buildUserPrompt(text, count) },
       ],
       temperature: 0.7,
     }),
-    signal: AbortSignal.timeout(60000),
+    signal: AbortSignal.timeout(60000 + count * 1000),
   });
 
   if (!res.ok) {
@@ -233,11 +235,11 @@ async function generateWithGrok(text: string): Promise<AiQuestion[]> {
 }
 
 /** Call Google Gemini API with a specific model */
-async function generateWithGemini(text: string, model: string): Promise<AiQuestion[]> {
+async function generateWithGemini(text: string, model: string, count: number): Promise<AiQuestion[]> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY not set');
 
-  const prompt = `${SYSTEM_PROMPT}\n\n${buildUserPrompt(text)}`;
+  const prompt = `${buildSystemPrompt(count)}\n\n${buildUserPrompt(text, count)}`;
 
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
@@ -251,7 +253,7 @@ async function generateWithGemini(text: string, model: string): Promise<AiQuesti
           responseMimeType: "application/json"
         },
       }),
-      signal: AbortSignal.timeout(60000),
+      signal: AbortSignal.timeout(60000 + count * 1000),
     }
   );
 
@@ -315,20 +317,23 @@ function parseAiResponse(raw: string): AiQuestion[] {
 }
 
 /** Try Groq first, then Gemini, then Grok (x.ai) */
-async function generateQuestions(text: string): Promise<AiQuestion[]> {
+async function generateQuestions(text: string, count: number = 10): Promise<AiQuestion[]> {
+  // Clamp count between 5 and 50
+  count = Math.max(5, Math.min(50, count));
   const errors: string[] = [];
+  console.log(`[AI] Generating ${count} questions...`);
 
   // 1. Try Groq (primary — free & fast)
   if (process.env.GROQ_API_KEY) {
     const groqModels = [
       'llama-3.3-70b-versatile',
       'llama-3.1-8b-instant',
-      'gemma2-9b-it',
+      'llama-3.2-3b-preview',
     ];
     for (const model of groqModels) {
       try {
-        console.log(`[AI] Trying Groq model: ${model}...`);
-        const questions = await generateWithGroq(text, model);
+        console.log(`[AI] Trying Groq model: ${model} for ${count} questions...`);
+        const questions = await generateWithGroq(text, model, count);
         if (questions.length > 0) {
           console.log(`[AI] Groq (${model}) generated ${questions.length} questions`);
           return questions;
@@ -345,13 +350,13 @@ async function generateQuestions(text: string): Promise<AiQuestion[]> {
   // 2. Fallback to Gemini
   if (process.env.GEMINI_API_KEY) {
     const geminiModels = [
-      'gemini-2.0-flash',
-      'gemini-2.0-flash-lite',
+      'gemini-2.5-flash',
+      'gemini-2.0-flash-001',
     ];
     for (const model of geminiModels) {
       try {
-        console.log(`[AI] Trying Gemini model: ${model}...`);
-        const questions = await generateWithGemini(text, model);
+        console.log(`[AI] Trying Gemini model: ${model} for ${count} questions...`);
+        const questions = await generateWithGemini(text, model, count);
         if (questions.length > 0) {
           console.log(`[AI] Gemini (${model}) generated ${questions.length} questions`);
           return questions;
@@ -367,8 +372,8 @@ async function generateQuestions(text: string): Promise<AiQuestion[]> {
   // 3. Fallback to Grok (x.ai)
   if (process.env.GROK_API_KEY) {
     try {
-      console.log('[AI] Trying Grok API...');
-      const questions = await generateWithGrok(text);
+      console.log(`[AI] Trying Grok API for ${count} questions...`);
+      const questions = await generateWithGrok(text, count);
       if (questions.length > 0) {
         console.log(`[AI] Grok generated ${questions.length} questions`);
         return questions;
@@ -411,7 +416,7 @@ const processAiJob = async (
         throw new Error(`Unsupported file type: ${file.mimetype}. Please upload a PDF or image.`);
       }
       // Clean up temp file
-      try { fs.unlinkSync(file.path); } catch (_) {}
+      try { fs.unlinkSync(file.path); } catch (_) { }
     } else if (reqBody.url || reqBody.targetUrl) {
       text = await extractTextFromUrl(reqBody.url || reqBody.targetUrl);
     } else if (reqBody.topic || reqBody.textContent) {
@@ -424,15 +429,18 @@ const processAiJob = async (
       throw new Error('Extracted text is too short to generate meaningful questions.');
     }
 
-    console.log(`[Job ${jobId}] Extracted ${text.length} chars, starting AI generation...`);
+    // Parse requested question count (default 10, clamped 5–50)
+    const requestedCount = reqBody.count && !isNaN(parseInt(reqBody.count, 10))
+      ? Math.max(5, Math.min(50, parseInt(reqBody.count, 10)))
+      : 10;
 
-    // 2. Generate questions via AI
-    let questions = await generateQuestions(text);
+    console.log(`[Job ${jobId}] Extracted ${text.length} chars, generating ${requestedCount} questions...`);
 
-    // Optionally limit count
-    if (reqBody.count && !isNaN(parseInt(reqBody.count, 10))) {
-      questions = questions.slice(0, parseInt(reqBody.count, 10));
-    }
+    // 2. Generate questions via AI with the requested count
+    let questions = await generateQuestions(text, requestedCount);
+
+    // Safety net: slice if LLM over-generated
+    questions = questions.slice(0, requestedCount);
 
     // 3. Save to database
     await prisma.importJob.update({

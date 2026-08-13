@@ -13,6 +13,7 @@ export default function ImageImportPage() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [questionCount, setQuestionCount] = useState(10);
   const [error, setError] = useState('');
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -39,6 +40,7 @@ export default function ImageImportPage() {
     mutationFn: async (uploadFile: File) => {
       const formData = new FormData();
       formData.append('file', uploadFile);
+      formData.append('count', String(questionCount));
       const res = await api.post<ApiResponse<ImportJobResponse>>('/ai/import/image', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
@@ -112,6 +114,29 @@ export default function ImageImportPage() {
           </div>
         </div>
       )}
+
+      <div className="mt-6 mb-6 bg-zinc-900/50 border border-zinc-800 rounded-2xl p-5">
+        <label className="block text-sm font-medium text-zinc-300 mb-3">Number of Questions</label>
+        <div className="flex items-center gap-4">
+          <input
+            type="range"
+            min={5}
+            max={50}
+            value={questionCount}
+            onChange={(e) => setQuestionCount(Number(e.target.value))}
+            className="flex-1 h-2 rounded-lg appearance-none cursor-pointer accent-violet-500 bg-zinc-700"
+          />
+          <input
+            type="number"
+            min={5}
+            max={50}
+            value={questionCount}
+            onChange={(e) => setQuestionCount(Math.max(5, Math.min(50, Number(e.target.value) || 5)))}
+            className="w-20 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-center font-semibold focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+          />
+        </div>
+        <p className="text-xs text-zinc-500 mt-2">Choose between 5 and 50 questions. The AI will generate approximately this many.</p>
+      </div>
 
       {error && (
         <div className="mt-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">

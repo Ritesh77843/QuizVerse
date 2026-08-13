@@ -237,6 +237,13 @@ function ReviewContent() {
           />
         </div>
         <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={addBlankQuestion}
+            className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white font-bold px-5 py-2.5 rounded-xl transition-all border border-zinc-755 hover:border-zinc-600"
+          >
+            <Plus className="w-4 h-4 text-violet-400" />
+            Add Question
+          </button>
           <button onClick={() => router.push('/host/ai-import')}
             className="px-5 py-2.5 rounded-xl font-semibold text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all border border-zinc-700">
             Discard
@@ -293,14 +300,23 @@ function ReviewContent() {
           <p className="text-sm text-zinc-400">
             <span className="text-white font-bold">{validCount}</span> questions ready to save
           </p>
-          <button
-            onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending}
-            className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-bold px-8 py-3 rounded-xl transition-all shadow-lg shadow-violet-600/20"
-          >
-            {saveMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-            {saveMutation.isPending ? 'Saving...' : 'Save as Quiz'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={addBlankQuestion}
+              className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white font-bold px-5 py-2.5 rounded-xl transition-all border border-zinc-700"
+            >
+              <Plus className="w-4 h-4 text-violet-400" />
+              Add Question
+            </button>
+            <button
+              onClick={() => saveMutation.mutate()}
+              disabled={saveMutation.isPending}
+              className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-bold px-8 py-3 rounded-xl transition-all shadow-lg shadow-violet-600/20"
+            >
+              {saveMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+              {saveMutation.isPending ? 'Saving...' : 'Save as Quiz'}
+            </button>
+          </div>
         </div>
       )}
     </div>

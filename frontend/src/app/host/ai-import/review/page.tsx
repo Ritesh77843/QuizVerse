@@ -13,6 +13,7 @@ interface AiQuestion {
   options: string[];
   correctAnswer: number;
   confidence: number;
+  timeLimit?: number;
 }
 
 const BLANK_QUESTION: AiQuestion = {
@@ -20,6 +21,7 @@ const BLANK_QUESTION: AiQuestion = {
   options: ['', '', '', ''],
   correctAnswer: 0,
   confidence: 100,
+  timeLimit: 30,
 };
 
 function QuestionCard({
@@ -45,15 +47,30 @@ function QuestionCard({
             {i + 1}
           </div>
           {editing ? (
-            <textarea
-              autoFocus
-              value={q.question}
-              onChange={e => onChange({ ...q, question: e.target.value })}
-              placeholder="Enter question text..."
-              className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-white text-sm focus:outline-none focus:border-violet-500 resize-none min-h-[60px]"
-            />
+            <div className="flex-1 space-y-3">
+              <textarea
+                autoFocus
+                value={q.question}
+                onChange={e => onChange({ ...q, question: e.target.value })}
+                placeholder="Enter question text..."
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-white text-sm focus:outline-none focus:border-violet-500 resize-none min-h-[60px]"
+              />
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-500 font-semibold">Time Limit:</span>
+                <select
+                  value={q.timeLimit ?? 30}
+                  onChange={e => onChange({ ...q, timeLimit: Number(e.target.value) })}
+                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1 text-white text-xs focus:outline-none focus:border-violet-500 font-medium"
+                >
+                  {[5, 10, 15, 20, 30, 45, 60, 90, 120].map(t => <option key={t} value={t}>{t}s</option>)}
+                </select>
+              </div>
+            </div>
           ) : (
-            <h3 className="text-base font-bold flex-1">{q.question}</h3>
+            <div className="flex-1">
+              <h3 className="text-base font-bold">{q.question}</h3>
+              <p className="text-xs text-violet-400 font-semibold font-mono mt-1">Timer: {q.timeLimit ?? 30}s</p>
+            </div>
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -149,14 +166,22 @@ function ReviewContent() {
         const parsed = typeof jobData.parsedQuestions === 'string'
           ? JSON.parse(jobData.parsedQuestions)
           : jobData.parsedQuestions;
-        setQuestions(parsed);
+        const enriched = parsed.map((pq: any) => ({
+          ...pq,
+          timeLimit: pq.timeLimit ?? 30
+        }));
+        setQuestions(enriched);
         if (jobData.title) setJobTitle(jobData.title);
       } catch (e) {
         console.error('Failed to parse questions', e);
       }
     }
     if (draftData?.questions && questions.length === 0) {
-      setQuestions(draftData.questions);
+      const enriched = draftData.questions.map((dq: any) => ({
+        ...dq,
+        timeLimit: dq.timeLimitSeconds ?? dq.timeLimit ?? 30
+      }));
+      setQuestions(enriched);
       if (draftData.title) setJobTitle(draftData.title);
     }
   }, [jobData, draftData]);
@@ -172,7 +197,7 @@ function ReviewContent() {
         questions: validQuestions.map(q => ({
           questionText: q.question,
           options: q.options.map((text, i) => ({ text, optionText: text, isCorrect: i === q.correctAnswer })),
-          timeLimit: 30,
+          timeLimit: q.timeLimit || 30,
           points: 100,
         })),
       });

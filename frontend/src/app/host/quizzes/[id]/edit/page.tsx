@@ -56,9 +56,8 @@ export default function EditQuizPage() {
   const { data: quiz, isLoading } = useQuery({
     queryKey: ['quiz', quizId],
     queryFn: async () => {
-      const res = await api.get<ApiResponse<Quiz>>(`/quizzes/${quizId}`);
-      const qRes = await api.get<ApiResponse<any[]>>(`/quizzes/${quizId}/questions`);
-      return { quiz: res.data.data, questions: qRes.data.data };
+      const res = await api.get<ApiResponse<any>>(`/quizzes/${quizId}`);
+      return { quiz: res.data.data, questions: res.data.data.questions || [] };
     },
   });
 

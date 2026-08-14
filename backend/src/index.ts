@@ -15,9 +15,19 @@ import analyticsRoutes from './routes/analytics.routes';
 
 dotenv.config();
 
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',')
-  : (process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : ['http://localhost:3000', 'http://localhost:8081']);
+const allowedOrigins = [
+  'https://quiz-verse-frontend-two.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:8081'
+];
+
+if (process.env.ALLOWED_ORIGINS) {
+  allowedOrigins.push(...process.env.ALLOWED_ORIGINS.split(','));
+}
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(...process.env.FRONTEND_URL.split(','));
+}
 
 const app = express();
 const httpServer = createServer(app);

@@ -15,11 +15,15 @@ import analyticsRoutes from './routes/analytics.routes';
 
 dotenv.config();
 
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : (process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : ['http://localhost:3000', 'http://localhost:8081']);
+
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: '*',
+    origin: allowedOrigins.includes('*') ? '*' : allowedOrigins,
     methods: ['GET', 'POST']
   },
   // High-traffic optimizations
@@ -33,7 +37,17 @@ const io = new Server(httpServer, {
   maxHttpBufferSize: 1e6 // 1MB max buffer per connection to prevent memory bloat
 });
 
-app.use(cors());
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
 app.use(express.json());
 
 // Routes
@@ -59,7 +73,7 @@ import bcrypt from 'bcryptjs';
 async function seedAdminUser() {
   const email = 'ritesh@prajapati.com';
   const hashedPassword = await bcrypt.hash('a1@A2@a3@A4@', 10);
-  
+
   const existingUser = await prisma.user.findUnique({ where: { email } });
   if (!existingUser) {
     await prisma.user.create({

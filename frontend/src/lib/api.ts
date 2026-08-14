@@ -1,8 +1,8 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  'https://quizverse-backend-h4j2.onrender.com/api';
+const rawUrl = process.env.NEXT_PUBLIC_API_URL || 'https://quizverse-backend-h4j2.onrender.com/api';
+const API_URL = rawUrl.endsWith('/api') || rawUrl.endsWith('/api/') ? rawUrl : `${rawUrl.replace(/\/$/, '')}/api`;
+
 
 export const api = axios.create({
   baseURL: API_URL,
